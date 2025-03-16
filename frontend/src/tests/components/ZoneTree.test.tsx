@@ -151,9 +151,9 @@ describe('ZoneTree', () => {
     const optionsButtons = screen.getAllByLabelText('options');
     fireEvent.click(optionsButtons[0]);
 
-    // Проверяем, что меню отображается
-    expect(screen.getByText('Редактировать')).toBeInTheDocument();
-    expect(screen.getByText('Удалить')).toBeInTheDocument();
+    // Проверяем, что меню отображается с правильными пунктами
+    expect(screen.getByText('Редактировать зону')).toBeInTheDocument();
+    expect(screen.getByText('Удалить зону')).toBeInTheDocument();
     expect(screen.getByText('Добавить окружение')).toBeInTheDocument();
   });
 

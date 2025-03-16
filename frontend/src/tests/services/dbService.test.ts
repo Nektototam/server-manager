@@ -1,114 +1,87 @@
 import { dbService } from '../../services/dbService';
+import { apiService } from '../../services/apiService';
 import { Zone, Server } from '../../models/types';
 
-// Мокаем PouchDB
-jest.mock('pouchdb-browser', () => {
-  return function() {
-    return {
-      get: jest.fn(),
-      put: jest.fn(),
-      post: jest.fn(),
-      remove: jest.fn(),
-      allDocs: jest.fn(),
-      changes: jest.fn(() => ({
-        on: jest.fn(),
-        cancel: jest.fn()
-      })),
-      sync: jest.fn(() => ({
-        on: jest.fn(),
-        cancel: jest.fn()
-      }))
-    };
-  };
-});
+// Мокаем apiService
+jest.mock('../../services/apiService', () => ({
+  apiService: {
+    getZones: jest.fn(),
+    getZone: jest.fn(),
+    createZone: jest.fn(),
+    updateZone: jest.fn(),
+    deleteZone: jest.fn(),
+    addEnvironment: jest.fn(),
+    updateEnvironment: jest.fn(),
+    deleteEnvironment: jest.fn(),
+    addServer: jest.fn(),
+    updateServer: jest.fn(),
+    deleteServer: jest.fn()
+  }
+}));
 
 describe('dbService', () => {
-  // Сбрасываем моки перед каждым тестом
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
+  describe('методы', () => {
+    it('должен иметь все необходимые методы', () => {
+      expect(dbService.getZones).toBeDefined();
+      expect(dbService.getZone).toBeDefined();
+      expect(dbService.createZone).toBeDefined();
+      expect(dbService.updateZone).toBeDefined();
+      expect(dbService.deleteZone).toBeDefined();
+      expect(dbService.addEnvironment).toBeDefined();
+      expect(dbService.updateEnvironment).toBeDefined();
+      expect(dbService.deleteEnvironment).toBeDefined();
+      expect(dbService.addServer).toBeDefined();
+      expect(dbService.updateServer).toBeDefined();
+      expect(dbService.deleteServer).toBeDefined();
+    });
+  });
+
   describe('getZones', () => {
-    it('должен возвращать список зон из базы данных', async () => {
-      // Мокаем ответ от PouchDB
-      const mockZones = {
-        rows: [
-          {
-            doc: {
-              _id: 'zone1',
-              _rev: '1-abc',
-              name: 'zone1',
-              type: 'zone',
-              environments: []
-            }
-          },
-          {
-            doc: {
-              _id: 'zone2',
-              _rev: '1-def',
-              name: 'zone2',
-              type: 'zone',
-              environments: []
-            }
-          }
-        ]
-      };
-      
-      // Устанавливаем мок для метода allDocs
-      (dbService as any).db.allDocs.mockResolvedValueOnce(mockZones);
-      
-      // Вызываем функцию
+    it('должен вызывать apiService.getZones', async () => {
+      const mockZones = [{ name: 'zone1', type: 'zone', environments: [] }];
+      (apiService.getZones as jest.Mock).mockResolvedValue(mockZones);
+
       const result = await dbService.getZones();
       
-      // Проверяем, что allDocs был вызван с правильными параметрами
-      expect((dbService as any).db.allDocs).toHaveBeenCalledWith({
-        include_docs: true
-      });
+      expect(apiService.getZones).toHaveBeenCalled();
+      expect(result).toEqual(mockZones);
+    });
+
+    it('должен обрабатывать ошибки при получении зон', async () => {
+      // Мокаем ошибку
+      const mockError = new Error('API error');
+      (apiService.getZones as jest.Mock).mockRejectedValueOnce(mockError);
       
-      // Проверяем результат
-      expect(result).toEqual([
-        {
-          _id: 'zone1',
-          _rev: '1-abc',
-          name: 'zone1',
-          type: 'zone',
-          environments: []
-        },
-        {
-          _id: 'zone2',
-          _rev: '1-def',
-          name: 'zone2',
-          type: 'zone',
-          environments: []
-        }
-      ]);
+      // Проверяем, что функция выбрасывает ошибку
+      await expect(dbService.getZones()).rejects.toThrow(mockError);
     });
   });
 
   describe('getZone', () => {
-    it('должен возвращать зону по имени', async () => {
-      // Мокаем ответ от PouchDB
-      const mockZone = {
-        _id: 'zone1',
-        _rev: '1-abc',
-        name: 'zone1',
-        type: 'zone',
-        environments: [
-          { name: 'prod', servers: [] }
-        ]
-      };
+    it('должен вызывать apiService.getZone с правильными параметрами', async () => {
+      const mockZone = { name: 'zone1', type: 'zone', environments: [] };
+      (apiService.getZone as jest.Mock).mockResolvedValue(mockZone);
+
+      const result = await dbService.getZone('zone1');
       
-      // Устанавливаем мок для метода get
-      (dbService as any).db.get.mockResolvedValueOnce(mockZone);
+      expect(apiService.getZone).toHaveBeenCalledWith('zone1');
+      expect(result).toEqual(mockZone);
+    });
+
+    it('должен возвращать null при ошибке получения зоны', async () => {
+      // Мокаем ошибку
+      const mockError = new Error('API error');
+      (apiService.getZone as jest.Mock).mockRejectedValueOnce(mockError);
       
       // Вызываем функцию
       const result = await dbService.getZone('zone1');
       
-      // Проверяем, что get был вызван с правильными параметрами
-      expect((dbService as any).db.get).toHaveBeenCalledWith('zone1');
-      
-      // Проверяем результат
-      expect(result).toEqual(mockZone);
+      // Проверяем, что результат равен null
+      expect(result).toBeNull();
     });
   });
 
@@ -121,28 +94,20 @@ describe('dbService', () => {
         environments: []
       };
       
-      // Мокаем ответ от PouchDB
-      const mockResponse = {
-        id: 'new-zone',
-        rev: '1-abc',
-        ok: true
-      };
+      // Мокаем ответ от API
+      const mockResponse = { ...testZone };
       
-      // Устанавливаем мок для метода post
-      (dbService as any).db.post.mockResolvedValueOnce(mockResponse);
+      // Устанавливаем мок для метода createZone
+      (apiService.createZone as jest.Mock).mockResolvedValueOnce(mockResponse);
       
       // Вызываем функцию
       const result = await dbService.createZone(testZone);
       
-      // Проверяем, что post был вызван с правильными параметрами
-      expect((dbService as any).db.post).toHaveBeenCalledWith(testZone);
+      // Проверяем, что apiService.createZone был вызван с правильными параметрами
+      expect(apiService.createZone).toHaveBeenCalledWith(testZone);
       
       // Проверяем результат
-      expect(result).toEqual({
-        ...testZone,
-        _id: 'new-zone',
-        _rev: '1-abc'
-      });
+      expect(result).toEqual(mockResponse);
     });
   });
 
@@ -150,8 +115,6 @@ describe('dbService', () => {
     it('должен обновлять существующую зону', async () => {
       // Создаем тестовую зону
       const testZone: Zone = {
-        _id: 'zone1',
-        _rev: '1-abc',
         name: 'zone1',
         type: 'zone',
         environments: [
@@ -159,126 +122,67 @@ describe('dbService', () => {
         ]
       };
       
-      // Мокаем ответ от PouchDB
-      const mockResponse = {
-        id: 'zone1',
-        rev: '2-def',
-        ok: true
-      };
+      // Мокаем ответ от API
+      const mockResponse = { ...testZone };
       
-      // Устанавливаем мок для метода put
-      (dbService as any).db.put.mockResolvedValueOnce(mockResponse);
+      // Устанавливаем мок для метода updateZone
+      (apiService.updateZone as jest.Mock).mockResolvedValueOnce(mockResponse);
       
       // Вызываем функцию
       const result = await dbService.updateZone(testZone);
       
-      // Проверяем, что put был вызван с правильными параметрами
-      expect((dbService as any).db.put).toHaveBeenCalledWith(testZone);
+      // Проверяем, что apiService.updateZone был вызван с правильными параметрами
+      expect(apiService.updateZone).toHaveBeenCalledWith(testZone);
       
       // Проверяем результат
-      expect(result).toEqual({
-        ...testZone,
-        _rev: '2-def'
-      });
+      expect(result).toEqual(mockResponse);
     });
   });
 
   describe('deleteZone', () => {
     it('должен удалять зону', async () => {
-      // Мокаем ответ от PouchDB для get
-      const mockZone = {
-        _id: 'zone1',
-        _rev: '1-abc',
-        name: 'zone1',
-        type: 'zone',
-        environments: []
-      };
-      
-      // Мокаем ответ от PouchDB для remove
-      const mockResponse = {
-        id: 'zone1',
-        rev: '2-def',
-        ok: true
-      };
-      
-      // Устанавливаем моки для методов
-      (dbService as any).db.get.mockResolvedValueOnce(mockZone);
-      (dbService as any).db.remove.mockResolvedValueOnce(mockResponse);
+      // Устанавливаем мок для метода deleteZone
+      (apiService.deleteZone as jest.Mock).mockResolvedValueOnce(undefined);
       
       // Вызываем функцию
       await dbService.deleteZone('zone1');
       
-      // Проверяем, что get был вызван с правильными параметрами
-      expect((dbService as any).db.get).toHaveBeenCalledWith('zone1');
-      
-      // Проверяем, что remove был вызван с правильными параметрами
-      expect((dbService as any).db.remove).toHaveBeenCalledWith(mockZone);
+      // Проверяем, что apiService.deleteZone был вызван с правильными параметрами
+      expect(apiService.deleteZone).toHaveBeenCalledWith('zone1');
     });
   });
 
   describe('addEnvironment', () => {
     it('должен добавлять окружение в зону', async () => {
-      // Мокаем ответ от PouchDB для get
-      const mockZone = {
-        _id: 'zone1',
-        _rev: '1-abc',
+      // Создаем тестовое окружение
+      const testEnv = {
+        name: 'dev',
+        servers: []
+      };
+      
+      // Мокаем ответ от API
+      const mockResponse = {
         name: 'zone1',
         type: 'zone',
-        environments: []
+        environments: [testEnv]
       };
       
-      // Мокаем ответ от PouchDB для put
-      const mockResponse = {
-        id: 'zone1',
-        rev: '2-def',
-        ok: true
-      };
-      
-      // Устанавливаем моки для методов
-      (dbService as any).db.get.mockResolvedValueOnce(mockZone);
-      (dbService as any).db.put.mockResolvedValueOnce(mockResponse);
+      // Устанавливаем мок для метода addEnvironment
+      (apiService.addEnvironment as jest.Mock).mockResolvedValueOnce(mockResponse);
       
       // Вызываем функцию
-      const result = await dbService.addEnvironment('zone1', { name: 'dev', servers: [] });
+      const result = await dbService.addEnvironment('zone1', testEnv);
       
-      // Проверяем, что get был вызван с правильными параметрами
-      expect((dbService as any).db.get).toHaveBeenCalledWith('zone1');
-      
-      // Проверяем, что put был вызван с правильными параметрами
-      expect((dbService as any).db.put).toHaveBeenCalledWith({
-        ...mockZone,
-        environments: [{ name: 'dev', servers: [] }]
-      });
+      // Проверяем, что apiService.addEnvironment был вызван с правильными параметрами
+      expect(apiService.addEnvironment).toHaveBeenCalledWith('zone1', testEnv);
       
       // Проверяем результат
-      expect(result).toEqual({
-        ...mockZone,
-        _rev: '2-def',
-        environments: [{ name: 'dev', servers: [] }]
-      });
+      expect(result).toEqual(mockResponse);
     });
   });
 
   describe('addServer', () => {
     it('должен добавлять сервер в окружение', async () => {
-      // Мокаем ответ от PouchDB для get
-      const mockZone = {
-        _id: 'zone1',
-        _rev: '1-abc',
-        name: 'zone1',
-        type: 'zone',
-        environments: [
-          { name: 'prod', servers: [] }
-        ]
-      };
-      
-      // Мокаем ответ от PouchDB для put
-      const mockResponse = {
-        id: 'zone1',
-        rev: '2-def',
-        ok: true
-      };
-      
       // Создаем тестовый сервер
       const testServer: Server = {
         fqdn: 'server1.example.com',
@@ -287,32 +191,29 @@ describe('dbService', () => {
         server_type: 'web'
       };
       
-      // Устанавливаем моки для методов
-      (dbService as any).db.get.mockResolvedValueOnce(mockZone);
-      (dbService as any).db.put.mockResolvedValueOnce(mockResponse);
+      // Мокаем ответ от API
+      const mockResponse = {
+        name: 'zone1',
+        type: 'zone',
+        environments: [
+          {
+            name: 'prod',
+            servers: [testServer]
+          }
+        ]
+      };
+      
+      // Устанавливаем мок для метода addServer
+      (apiService.addServer as jest.Mock).mockResolvedValueOnce(mockResponse);
       
       // Вызываем функцию
       const result = await dbService.addServer('zone1', 'prod', testServer);
       
-      // Проверяем, что get был вызван с правильными параметрами
-      expect((dbService as any).db.get).toHaveBeenCalledWith('zone1');
-      
-      // Проверяем, что put был вызван с правильными параметрами
-      expect((dbService as any).db.put).toHaveBeenCalledWith({
-        ...mockZone,
-        environments: [
-          { name: 'prod', servers: [testServer] }
-        ]
-      });
+      // Проверяем, что apiService.addServer был вызван с правильными параметрами
+      expect(apiService.addServer).toHaveBeenCalledWith('zone1', 'prod', testServer);
       
       // Проверяем результат
-      expect(result).toEqual({
-        ...mockZone,
-        _rev: '2-def',
-        environments: [
-          { name: 'prod', servers: [testServer] }
-        ]
-      });
+      expect(result).toEqual(mockResponse);
     });
   });
 }); 
