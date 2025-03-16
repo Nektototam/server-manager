@@ -82,3 +82,7 @@ Thumbs.db
 *.sw?
 /backend/data
 /backend/venv
+/client/venv
+/client/htmlcov
+/client/tests/htmlcov
+/backend/tests/htmlcov
