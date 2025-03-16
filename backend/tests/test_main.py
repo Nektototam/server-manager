@@ -8,12 +8,15 @@ from datetime import timedelta
 # Добавляем родительскую директорию в sys.path для импорта модулей
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Импортируем функции и классы из main.py
-from main import (
-    create_db_if_not_exists, get_doc, save_doc, delete_doc, 
-    get_all_docs, verify_password, get_password_hash, 
-    get_user, authenticate_user, create_access_token
-)
+# Мокаем create_db_if_not_exists перед импортом main
+with patch('requests.put') as mock_put:
+    mock_put.return_value.status_code = 201
+    # Импортируем функции и классы из main.py
+    from main import (
+        create_db_if_not_exists, get_doc, save_doc, delete_doc, 
+        get_all_docs, verify_password, get_password_hash, 
+        get_user, authenticate_user, create_access_token
+    )
 
 class TestDatabaseFunctions:
     """Тесты для функций работы с базой данных"""

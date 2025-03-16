@@ -1,10 +1,26 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import sys
 import os
 
 # Добавляем родительскую директорию в sys.path для импорта модулей
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Мокаем requests.put для предотвращения реальных запросов к базе данных
+@pytest.fixture(autouse=True)
+def mock_requests(monkeypatch):
+    """Фикстура для мока всех HTTP-запросов"""
+    # Создаем мок-объект для ответа
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {}
+    
+    # Мокаем все методы requests
+    with patch('requests.put', return_value=mock_response), \
+         patch('requests.get', return_value=mock_response), \
+         patch('requests.post', return_value=mock_response), \
+         patch('requests.delete', return_value=mock_response):
+        yield
 
 @pytest.fixture
 def mock_response():
