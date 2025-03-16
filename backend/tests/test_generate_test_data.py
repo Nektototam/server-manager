@@ -19,9 +19,9 @@ with patch('random.choice') as mock_choice, \
     
     # Импортируем функции из generate_test_data.py
     from generate_test_data import (
-        get_token, generate_server_name, generate_ip, generate_server, 
-        generate_servers, generate_environment, generate_environments, 
-        generate_zone, generate_zones, generate_test_data
+        get_token, get_all_zones, zone_exists, create_zone, 
+        get_zone, create_environment, create_server, 
+        generate_random_ip, generate_server_data, main
     )
 
 class TestGenerateTestData:
@@ -42,140 +42,173 @@ class TestGenerateTestData:
         # Проверяем результат
         assert token == "test_token"
     
-    def test_generate_server_name(self, mocker):
-        """Тест генерации имени сервера"""
-        # Мокаем random.choice для предсказуемых результатов
-        mocker.patch('random.choice', side_effect=["app", "01", "prod"])
+    def test_get_all_zones(self, mocker):
+        """Тест получения всех зон"""
+        # Создаем мок для requests.get
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {"name": "zone1", "type": "zone", "environments": []},
+            {"name": "zone2", "type": "zone", "environments": []}
+        ]
+        
+        mocker.patch('requests.get', return_value=mock_response)
         
         # Вызываем тестируемую функцию
-        server_name = generate_server_name("web")
+        zones = get_all_zones("test_token")
         
         # Проверяем результат
-        assert server_name == "web-app01.prod.example.com"
+        assert len(zones) == 2
+        assert zones[0]["name"] == "zone1"
+        assert zones[1]["name"] == "zone2"
     
-    def test_generate_ip(self, mocker):
-        """Тест генерации IP-адреса"""
+    def test_zone_exists(self, mocker):
+        """Тест проверки существования зоны"""
+        # Мокаем get_all_zones
+        mocker.patch('generate_test_data.get_all_zones', return_value=[
+            {"name": "zone1", "type": "zone", "environments": []},
+            {"name": "zone2", "type": "zone", "environments": []}
+        ])
+        
+        # Вызываем тестируемую функцию
+        exists_true = zone_exists("test_token", "zone1")
+        exists_false = zone_exists("test_token", "nonexistent")
+        
+        # Проверяем результат
+        assert exists_true is True
+        assert exists_false is False
+    
+    def test_create_zone(self, mocker):
+        """Тест создания зоны"""
+        # Создаем мок для requests.post
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": "Zone created"}
+        
+        mocker.patch('requests.post', return_value=mock_response)
+        
+        # Вызываем тестируемую функцию
+        result = create_zone("test_token", "new_zone")
+        
+        # Проверяем результат
+        assert result is True
+    
+    def test_get_zone(self, mocker):
+        """Тест получения информации о зоне"""
+        # Создаем мок для requests.get
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"name": "zone1", "type": "zone", "environments": []}
+        
+        mocker.patch('requests.get', return_value=mock_response)
+        
+        # Вызываем тестируемую функцию
+        zone = get_zone("test_token", "zone1")
+        
+        # Проверяем результат
+        assert zone["name"] == "zone1"
+    
+    def test_create_environment(self, mocker):
+        """Тест создания окружения"""
+        # Создаем мок для requests.post
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": "Environment created"}
+        
+        mocker.patch('requests.post', return_value=mock_response)
+        
+        # Вызываем тестируемую функцию
+        result = create_environment("test_token", "zone1", "prod")
+        
+        # Проверяем результат
+        assert result is True
+    
+    def test_create_server(self, mocker):
+        """Тест создания сервера"""
+        # Создаем мок для requests.post
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"message": "Server created"}
+        
+        mocker.patch('requests.post', return_value=mock_response)
+        
+        # Вызываем тестируемую функцию
+        server_data = {
+            "fqdn": "web01.example.com",
+            "ip": "192.168.1.1",
+            "server_type": "web",
+            "status": "available"
+        }
+        result = create_server("test_token", "zone1", "prod", server_data)
+        
+        # Проверяем результат
+        assert result is True
+    
+    def test_generate_random_ip(self, mocker):
+        """Тест генерации случайного IP-адреса"""
         # Мокаем random.randint для предсказуемых результатов
         mocker.patch('random.randint', side_effect=[192, 168, 1, 10])
         
         # Вызываем тестируемую функцию
-        ip = generate_ip()
+        ip = generate_random_ip()
         
         # Проверяем результат
         assert ip == "192.168.1.10"
     
-    def test_generate_server(self, mocker):
-        """Тест генерации сервера"""
-        # Мокаем вспомогательные функции
-        mocker.patch('generate_test_data.generate_server_name', return_value="web-app01.prod.example.com")
-        mocker.patch('generate_test_data.generate_ip', return_value="192.168.1.10")
+    def test_generate_server_data(self, mocker):
+        """Тест генерации данных сервера"""
+        # Мокаем random.choice
         mocker.patch('random.choice', return_value="available")
         
-        # Вызываем тестируемую функцию
-        server = generate_server("web")
-        
-        # Проверяем результат
-        assert server["fqdn"] == "web-app01.prod.example.com"
-        assert server["ip"] == "192.168.1.10"
-        assert server["server_type"] == "web"
-        assert server["status"] == "available"
-    
-    def test_generate_servers(self, mocker):
-        """Тест генерации списка серверов"""
-        # Мокаем generate_server для предсказуемых результатов
-        mock_server = {"fqdn": "test-server", "ip": "192.168.1.1", "server_type": "web", "status": "available"}
-        mocker.patch('generate_test_data.generate_server', return_value=mock_server)
-        
-        # Вызываем тестируемую функцию с разными параметрами
-        servers_1 = generate_servers(1, "web")
-        servers_3 = generate_servers(3, "db")
-        
-        # Проверяем результаты
-        assert len(servers_1) == 1
-        assert servers_1[0] == mock_server
-        
-        assert len(servers_3) == 3
-        assert all(server == mock_server for server in servers_3)
-    
-    def test_generate_environment(self, mocker):
-        """Тест генерации окружения"""
-        # Мокаем generate_servers
-        mock_servers = [{"fqdn": "test-server", "ip": "192.168.1.1", "server_type": "web", "status": "available"}]
-        mocker.patch('generate_test_data.generate_servers', return_value=mock_servers)
+        # Мокаем generate_random_ip
+        mocker.patch('generate_test_data.generate_random_ip', return_value="192.168.1.10")
         
         # Вызываем тестируемую функцию
-        env = generate_environment("prod", 1, 1, 1)
+        server_data = generate_server_data("zone1", "prod", 1)
         
         # Проверяем результат
-        assert env["name"] == "prod"
-        assert len(env["servers"]) == 3  # 1 web + 1 app + 1 db = 3 сервера
-        assert all(server == mock_servers[0] for server in env["servers"])
+        assert "fqdn" in server_data
+        assert server_data["ip"] == "192.168.1.10"
+        assert "server_type" in server_data
+        assert server_data["status"] == "available"
     
-    def test_generate_environments(self, mocker):
-        """Тест генерации списка окружений"""
-        # Мокаем generate_environment
-        mock_env = {"name": "prod", "servers": [{"fqdn": "test-server"}]}
-        mocker.patch('generate_test_data.generate_environment', return_value=mock_env)
-        
-        # Вызываем тестируемую функцию
-        envs = generate_environments()
-        
-        # Проверяем результат
-        assert len(envs) == 3  # По умолчанию 3 окружения: prod, stage, dev
-        assert all(env == mock_env for env in envs)
-    
-    def test_generate_zone(self, mocker):
-        """Тест генерации зоны"""
-        # Мокаем generate_environments
-        mock_envs = [{"name": "prod", "servers": []}]
-        mocker.patch('generate_test_data.generate_environments', return_value=mock_envs)
-        
-        # Вызываем тестируемую функцию
-        zone = generate_zone("zone1")
-        
-        # Проверяем результат
-        assert zone["_id"] == "zone:zone1"
-        assert zone["name"] == "zone1"
-        assert zone["type"] == "zone"
-        assert zone["environments"] == mock_envs
-    
-    def test_generate_zones(self, mocker):
-        """Тест генерации списка зон"""
-        # Мокаем generate_zone
-        mock_zone = {"_id": "zone:test", "name": "test", "type": "zone", "environments": []}
-        mocker.patch('generate_test_data.generate_zone', return_value=mock_zone)
-        
-        # Вызываем тестируемую функцию
-        zones = generate_zones(["zone1", "zone2"])
-        
-        # Проверяем результат
-        assert len(zones) == 2
-        assert all(zone == mock_zone for zone in zones)
-    
-    def test_generate_test_data(self, mocker):
-        """Тест генерации тестовых данных"""
+    def test_main(self, mocker):
+        """Тест основной функции"""
         # Мокаем get_token
         mocker.patch('generate_test_data.get_token', return_value="test_token")
         
-        # Мокаем get_all_docs для возврата пустого списка
-        mocker.patch('generate_test_data.get_all_docs', return_value={"rows": []})
+        # Мокаем get_all_zones
+        mocker.patch('generate_test_data.get_all_zones', return_value=[])
         
-        # Мокаем generate_zones
-        mock_zones = [
-            {"_id": "zone:zone1", "name": "zone1", "type": "zone", "environments": []},
-            {"_id": "zone:zone2", "name": "zone2", "type": "zone", "environments": []}
-        ]
-        mocker.patch('generate_test_data.generate_zones', return_value=mock_zones)
+        # Мокаем zone_exists
+        mocker.patch('generate_test_data.zone_exists', return_value=False)
         
-        # Мокаем save_doc
-        save_doc_mock = mocker.patch('generate_test_data.save_doc')
+        # Мокаем create_zone
+        create_zone_mock = mocker.patch('generate_test_data.create_zone', return_value=True)
         
-        # Вызываем тестируемую функцию
-        generate_test_data()
+        # Мокаем create_environment
+        create_env_mock = mocker.patch('generate_test_data.create_environment', return_value=True)
         
-        # Проверяем, что save_doc была вызвана для каждой зоны
-        assert save_doc_mock.call_count == 2
-        save_doc_mock.assert_has_calls([
-            call("server_resources", mock_zones[0]),
-            call("server_resources", mock_zones[1])
-        ]) 
+        # Мокаем create_server
+        create_server_mock = mocker.patch('generate_test_data.create_server', return_value=True)
+        
+        # Мокаем generate_server_data
+        mocker.patch('generate_test_data.generate_server_data', return_value={
+            "fqdn": "web01.example.com",
+            "ip": "192.168.1.1",
+            "server_type": "web",
+            "status": "available"
+        })
+        
+        # Мокаем time.sleep чтобы тест не ждал
+        mocker.patch('time.sleep')
+        
+        # Вызываем тестируемую функцию с минимальными параметрами для быстрого выполнения
+        # Перехватываем sys.exit
+        with patch('sys.exit'):
+            main()
+        
+        # Проверяем, что основные функции были вызваны
+        assert create_zone_mock.call_count >= 1
+        assert create_env_mock.call_count >= 1
+        assert create_server_mock.call_count >= 1 
